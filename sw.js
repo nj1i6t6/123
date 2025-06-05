@@ -1,26 +1,24 @@
 // sw.js
-const CACHE_NAME = 'ai-image-translator-cache-v1';
+const CACHE_NAME = 'ai-image-translator-cache-v2'; // Cache version updated to trigger update
 const urlsToCache = [
-  './', // Or your specific HTML file name e.g., './index.html'
+  './', // Caches the root HTML file (index.html)
+  './index.html', // Explicitly cache index.html
+  './manifest.json', // Cache the manifest file
   './112992.jpg', // Cache the app icon
-  // Add other critical assets if any, like main CSS or JS files if they are separate
-  'https://cdn.jsdelivr.net/npm/marked/marked.min.js' // Cache external library
+  'https://cdn.jsdelivr.net/npm/marked/marked.min.js', // Cache external library
+  // Add any other CSS or JS files if they are external or important for offline functionality
+  // e.g., './style.css', './main.js' if you had them
 ];
 
 self.addEventListener('install', event => {
-  console.log('Service Worker: Installing...');
+  console.log('Service Worker: Installing and caching assets...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Service Worker: Caching app shell');
-        // Use addAll which fetches and caches. If any fetch fails, addAll fails.
-        // For external resources like CDNs, be mindful of CORS if using cache.put directly with new Request(url, {mode: 'no-cors'})
-        // but addAll handles standard CORS requests.
-        return cache.addAll(urlsToCache.map(urlToCache => new Request(urlToCache, {cache: 'reload'})));
+        return cache.addAll(urlsToCache);
       })
-      .then(() => {
-        return self.skipWaiting();
-      })
+      .then(() => self.skipWaiting()) // Force the new service worker to activate immediately
       .catch(error => {
         console.error('Service Worker: Failed to cache during install:', error);
       })
@@ -28,7 +26,7 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-  console.log('Service Worker: Activating...');
+  console.log('Service Worker: Activating and cleaning old caches...');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
@@ -39,45 +37,59 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    }).then(() => {
-      return self.clients.claim();
-    })
+    }).then(() => self.clients.claim()) // Take control of clients immediately
   );
 });
 
 self.addEventListener('fetch', event => {
+  // Only handle GET requests for caching
   if (event.request.method === 'GET') {
-    // Cache-First strategy
     event.respondWith(
       caches.match(event.request)
         .then(response => {
+          // Cache hit - return response
           if (response) {
-            return response; // Serve from cache
+            return response;
           }
-          // Not in cache, fetch from network
+          // Not in cache - fetch from network
           return fetch(event.request).then(
             networkResponse => {
-              // Optionally, cache new GET requests dynamically if they are important
-              // Be careful about caching API calls or frequently changing content
-              // For example, only cache if it's one of the predefined URLs or asset types
-              // const shouldCache = urlsToCache.some(url => event.request.url.endsWith(new URL(url, self.location.origin).pathname));
-              // if (shouldCache) {
-              // return caches.open(CACHE_NAME).then(cache => {
-              // cache.put(event.request, networkResponse.clone());
-              // return networkResponse;
-              // });
-              // }
+              // Check if we received a valid response
+              if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+                return networkResponse;
+              }
+
+              // IMPORTANT: Clone the response. A response is a stream
+              // and can only be consumed once. We must clone it so that
+              // we can serve it to the browser and put a copy in the cache.
+              const responseToCache = networkResponse.clone();
+
+              // Dynamically cache new requests if needed, but only for assets that are safe to cache.
+              // For a simple PWA, caching during install is often sufficient for core assets.
+              // If you want to cache images/dynamic content on first fetch:
+              /*
+              if (event.request.url.startsWith(self.location.origin) && event.request.destination === 'image') {
+                  caches.open(CACHE_NAME).then(cache => {
+                      cache.put(event.request, responseToCache);
+                  });
+              }
+              */
               return networkResponse;
             }
-          );
-        })
-        .catch(error => {
-          console.error('Service Worker: Fetch error: ', error, event.request.url);
-          // You could return a fallback offline page here if desired
+          ).catch(error => {
+            console.error('Service Worker: Fetch failed:', event.request.url, error);
+            // You can return a fallback response here for offline situations
+            // For example, if it's an image request, return a placeholder image.
+            // if (event.request.destination === 'image') {
+            //   return caches.match('./placeholder-image.png');
+            // }
+            // return new Response('<h1>Offline</h1>', { headers: { 'Content-Type': 'text/html' } });
+            throw error; // Rethrow to let browser handle network error if no fallback
+          });
         })
     );
   } else {
-    // For non-GET requests (POST, etc.), always fetch from network
-    event.respondWith(fetch(event.request));
+    // For non-GET requests (e.g., POST to API), always go to network
+    return fetch(event.request);
   }
 });
