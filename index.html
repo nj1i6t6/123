@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AI 圖像辨識翻譯</title>
+    <!-- PWA Manifest Link -->
     <link rel="manifest" href="./manifest.json">
+    <!-- Theme Color for browsers -->
     <meta name="theme-color" content="#007bff">
+    <!-- Apple Touch Icon for iOS Safari -->
+    <link rel="apple-touch-icon" href="./112992.jpg">
     <style>
         :root {
             --primary-color: #007bff;
@@ -580,17 +584,17 @@ If the image content does not appear to be a menu, or the previous translation i
 ...`,
                 apiPromptMenuMoreInfo: `이전 메뉴 번역에 이어, 이 메뉴 이미지의 각 항목에 대해 가능하다면 간단한 "항목 설명"을 제공하십시오.
 - 설명에는 주요 재료, 풍미 특징, 양 추측 또는 주문에 도움이 될 만한 보충 정보가 포함될 수 있습니다.
-- 대상 언어(${currentTargetLanguage})의 자연스러운 표현을 사용하십시오.
-- 형식은 "원문", "번역", "가격"을 나열한 다음 그 아래에 "설명"을 추가하십시오.
+- 대상 언어(${currentTargetLanguage})의 자연스러운 표현을 사용하십시오。
+- 格式請依然先列出「原文」、「翻譯」、「價格」，然後在其下方加上「解說」。
 
-응답 템플릿 (Markdown 사용):
-- 원문: [원문 항목 1], 번역: [번역된 항목 1], 가격: [가격 1]
-  설명: [항목 1에 대한 설명...]
-- 원文: [원문 항목 2], 번역: [번역된 항목 2], 가격: [가격 2]
-  설명: [항목 2에 대한 설명...]
+回覆樣板 (使用 Markdown)：
+- 原文: [品項原文1], 翻譯: [品項翻譯1], 價格: [價格1]
+  解說: [對品項1的解說...]
+- 原文: [品項原文2], 翻譯: [品項翻譯2], 價格: [價格2]
+  解說: [對品項2的解說...]
 ...
 
-이미지 내용이 메뉴로 보이지 않거나 이전 번역에서 메뉴가 아니라고 표시된 경우, "메뉴가 아닌 내용에 대한 자세한 정보를 제공할 수 없습니다."라고 직접 응답하십시오.`,
+如果圖片內容看起來並非菜單，或先前的翻譯結果顯示非菜單，請直接回覆「無法提供更多關於非菜單內容的解說。」`,
                 moreInfoPlaceholder: '더 자세한 정보가 여기에 표시됩니다!',
                 moreInfoPrefix: 'AI 추가 설명：\n',
                 copyButtonText: '복사',
@@ -1147,36 +1151,46 @@ If the image content does not appear to be a menu, or the previous translation i
         window.addEventListener('beforeinstallprompt', (event) => {
             event.preventDefault(); // Prevent the mini-infobar from appearing on mobile
             deferredInstallPrompt = event;
-            // Optionally: Show the button if it was initially hidden and PWA criteria are met.
-            // For now, we keep the button always visible on the settings page.
-            // If you prefer to show it only when installable:
-            // addToHomeScreenButton.style.display = 'inline-block';
+            // You can optionally show a custom UI element here to indicate installability,
+            // or modify the existing addToHomeScreenButton visibility.
+            // For now, it's always visible on the settings page as per current UI.
             console.log('`beforeinstallprompt` event was fired.');
+            // This is where you might change addToHomeScreenButton.style.display if it was initially 'none'
+            // addToHomeScreenButton.style.display = 'block'; // Or 'inline-block'
+        });
+
+        // Event listener for when the app is installed
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA was installed!');
+            // You might want to hide the "Add to Home Screen" button after installation
+            if (addToHomeScreenButton) {
+                addToHomeScreenButton.style.display = 'none';
+            }
         });
 
         addToHomeScreenButton.addEventListener('click', async () => {
             if (deferredInstallPrompt) {
+                console.log('Triggering A2HS prompt...');
                 deferredInstallPrompt.prompt(); // Show the install prompt
                 const { outcome } = await deferredInstallPrompt.userChoice;
                 console.log(`User response to the A2HS prompt: ${outcome}`);
                 if (outcome === 'accepted') {
                     console.log('User accepted the A2HS prompt');
-                     // addToHomeScreenButton.style.display = 'none'; // Hide after successful install prompt
+                    // The 'appinstalled' event listener will handle hiding the button
                 } else {
                     console.log('User dismissed the A2HS prompt');
+                    // If dismissed, the button might stay visible for a retry, or you could hide it.
+                    // Based on the current alert logic, it implies keeping it visible so the alert path is taken next.
                 }
                 deferredInstallPrompt = null; // The prompt can only be used once
-                // Consider whether to hide the button even if dismissed, or keep it for the alert.
-                // Hiding it here means if user dismisses, they won't see the alert path next time.
-                // For simplicity and current structure, let's keep it visible and it will hit the else block next time.
-                // Or, if you want to hide it after any prompt attempt:
-                // addToHomeScreenButton.style.display = 'none';
             } else {
-                // deferredInstallPrompt is null, means the browser doesn't support,
-                // or the PWA is already installed, or the event wasn't fired (e.g., on desktop Chrome without meeting criteria,
-                // or PWA criteria like manifest/SW not met)
+                // deferredInstallPrompt is null, meaning:
+                // 1. The PWA is already installed.
+                // 2. The user has previously dismissed the prompt and the browser decided not to show it again yet.
+                // 3. The PWA criteria (manifest, service worker, HTTPS, engagement heuristic) are not met.
+                // 4. The browser doesn't support the A2HS API.
                 alert(i18n[currentTargetLanguage].alert_addToHomeScreenManually || '此瀏覽器可能不支援自動新增，或您已安裝/拒絕過。請嘗試透過瀏覽器選單手動「新增至主畫面」。');
-                console.log('Add to Home Screen button clicked, but no deferredInstallPrompt available. PWA criteria might not be met or app already installed.');
+                console.log('Add to Home Screen button clicked, but no deferredInstallPrompt available. PWA might already be installed or criteria not met.');
             }
         });
 
